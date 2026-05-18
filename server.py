@@ -1,7 +1,6 @@
-import ssl
-
 import json
 import socket
+import ssl
 import threading
 import urllib.parse
 import urllib.request
@@ -15,13 +14,14 @@ PORT = 5050
 BACKLOG = 8
 
 MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/"
-HTTP_TIMEOUT = 15  # seconds
+HTTP_TIMEOUT = 15
 
 RECIPE_LIST_LIMIT = 15
 INGREDIENT_FILE_LIMIT = 50
 
 REFERENCE_FILE = f"reference_{GROUP_ID}.json"
-
+CERT_FILE = "cert.pem"
+KEY_FILE = "key.pem"
 
 reference_cache = {
     "categories": [],
@@ -32,19 +32,16 @@ reference_cache = {
 clients_lock = threading.Lock()
 file_lock = threading.Lock()
 log_lock = threading.Lock()
-clients_online = {}  # addr -> name
+clients_online = {}
 
 
 def log(message):
-    """Thread-safe timestamped console output."""
     stamp = datetime.now().strftime("%H:%M:%S")
     with log_lock:
         print(f"[{stamp}] {message}", flush=True)
 
 
-
 def http_get_json(path, params=None):
-    """GET <MEALDB_BASE><path>?<params> and return the parsed JSON dict."""
     url = MEALDB_BASE + path
     if params:
         url += "?" + urllib.parse.urlencode(params)
@@ -55,7 +52,6 @@ def http_get_json(path, params=None):
 
 
 def build_reference_cache():
-    """Fetch the three reference lists once and populate reference_cache."""
     log("Fetching reference data from TheMealDB ...")
 
     cat_list = http_get_json("list.php", {"c": "list"}).get("meals") or []
@@ -107,7 +103,6 @@ def brief_recipe(meal):
 
 
 def full_recipe(meal):
-    """Project a raw meal record to the fields required by Table 3."""
     ingredients = []
     for i in range(1, 21):
         name = (meal.get(f"strIngredient{i}") or "").strip()
@@ -151,21 +146,12 @@ def save_recipe_response(client_name, option, payload):
 
 
 def handle_reference(kind):
-    """Serve a reference list from the in-memory cache."""
-    if kind == "categories":
-        return {"status": "ok", "kind": "categories",
-                "items": reference_cache["categories"]}
-    if kind == "areas":
-        return {"status": "ok", "kind": "areas",
-                "items": reference_cache["areas"]}
-    if kind == "ingredients":
-        return {"status": "ok", "kind": "ingredients",
-                "items": reference_cache["ingredients"]}
+    if kind in reference_cache:
+        return {"status": "ok", "kind": kind, "items": reference_cache[kind]}
     return {"status": "error", "message": f"unknown reference kind: {kind}"}
 
 
 def handle_recipe(req, client_name):
-    """Forward a recipe request to TheMealDB and shape the response."""
     op = req.get("op", "")
 
     if op == "search":
@@ -227,9 +213,7 @@ def handle_recipe(req, client_name):
     return {"status": "error", "message": f"unknown recipe op: {op}"}
 
 
-
 def describe_request(req):
-    """Build a short human-readable summary for the console log."""
     rtype = req.get("type", "?")
     if rtype == "ref":
         return f"ref/{req.get('kind', '?')}"
@@ -245,7 +229,6 @@ def describe_request(req):
 
 
 def request_source(req):
-    """Return 'cache' or 'TheMealDB' for the given request."""
     if req.get("type") == "ref":
         return "cache"
     if req.get("type") == "recipe":
@@ -292,7 +275,7 @@ def handle_client(conn, addr):
             except urllib.request.URLError as exc:
                 resp = {"status": "error",
                         "message": f"upstream error: {exc.reason}"}
-            except Exception as exc:  # last-resort guard
+            except Exception as exc:
                 resp = {"status": "error",
                         "message": f"server error: {exc}"}
 
@@ -314,25 +297,28 @@ def handle_client(conn, addr):
         log(f"Client disconnected: {client_name}")
 
 
-
 def main():
     build_reference_cache()
     persist_reference_file()
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind((HOST, PORT))
-        srv.listen(BACKLOG)
-        log(f"Listening on {HOST}:{PORT} (group {GROUP_ID})")
-        try:
-            while True:
-                conn, addr = srv.accept()
-                t = threading.Thread(target=handle_client,
-                                     args=(conn, addr),
-                                     daemon=True)
-                t.start()
-        except KeyboardInterrupt:
-            log("Server shutting down (keyboard interrupt).")
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as raw:
+        raw.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        raw.bind((HOST, PORT))
+        raw.listen(BACKLOG)
+        with tls.wrap_socket(raw, server_side=True) as srv:
+            log(f"Listening on {HOST}:{PORT} with TLS (group {GROUP_ID})")
+            try:
+                while True:
+                    conn, addr = srv.accept()
+                    t = threading.Thread(target=handle_client,
+                                         args=(conn, addr),
+                                         daemon=True)
+                    t.start()
+            except KeyboardInterrupt:
+                log("Server shutting down.")
 
 
 if __name__ == "__main__":
