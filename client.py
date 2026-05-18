@@ -1,29 +1,16 @@
-"""
-Recipe Discovery System - Client
-ITNE352 Term Project
 
-Interactive CLI client that connects to the Recipe Discovery server,
-identifies itself by name, and lets the user browse recipes and reference
-lists through three nested menus.
-
-Edit HOST / PORT below if the server runs elsewhere.
-"""
 
 import socket
 import sys
 
 from protocol import ProtocolError, recv_message, send_message
 
-# --------------------------------------------------------------------------
-# Configuration -- edit if your server runs elsewhere
-# --------------------------------------------------------------------------
+
 HOST = "127.0.0.1"
 PORT = 5050
 
 
-# --------------------------------------------------------------------------
-# Input helpers
-# --------------------------------------------------------------------------
+
 def prompt(text):
     """Read a line of input, raising KeyboardInterrupt on EOF for clean exit."""
     try:
@@ -42,7 +29,6 @@ def prompt_choice(text, valid):
 
 
 def prompt_index(text, count):
-    """Ask for a 1-based index in [1, count] or 0 to cancel; return 0..count."""
     while True:
         raw = prompt(text).strip()
         if not raw:
@@ -54,9 +40,7 @@ def prompt_index(text, count):
         print(f"Please enter a number between 0 and {count} (0 to cancel).")
 
 
-# --------------------------------------------------------------------------
-# Network helpers
-# --------------------------------------------------------------------------
+
 def exchange(sock, request):
     """Send a request and return the server's response (or an error dict)."""
     send_message(sock, request)
@@ -67,7 +51,7 @@ def exchange(sock, request):
 
 
 def fetch_reference(sock, kind):
-    """Convenience wrapper around the 'ref' request."""
+    
     resp = exchange(sock, {"type": "ref", "kind": kind})
     if resp.get("status") != "ok":
         print(f"Error: {resp.get('message', 'unknown error')}")
@@ -75,9 +59,6 @@ def fetch_reference(sock, kind):
     return resp.get("items", [])
 
 
-# --------------------------------------------------------------------------
-# Display helpers
-# --------------------------------------------------------------------------
 def show_recipe_list(items):
     """Render a brief recipe list (id / name / thumbnail) numbered for picking."""
     if not items:
@@ -93,7 +74,7 @@ def show_recipe_list(items):
 
 
 def show_recipe_detail(recipe):
-    """Render full details of a single recipe."""
+    
     if not recipe:
         print("  (no recipe)")
         return
@@ -164,9 +145,7 @@ def pick_from_named_list(items, prompt_label):
     return items[n - 1].get("name", "")
 
 
-# --------------------------------------------------------------------------
-# Recipe flows (1.1 - 1.5)
-# --------------------------------------------------------------------------
+
 def drilldown_recipe(sock, items, option_id):
     """After listing recipes, let the user pick one to view in full."""
     if not items:
@@ -260,9 +239,8 @@ def option_random_recipe(sock):
     show_recipe_detail(resp.get("recipe"))
 
 
-# --------------------------------------------------------------------------
-# Menus
-# --------------------------------------------------------------------------
+
+# Menu
 RECIPES_MENU = (
     "\nRecipes Menu\n"
     "  1.1  Search by name\n"
@@ -339,9 +317,7 @@ def main_menu_loop(sock):
             return
 
 
-# --------------------------------------------------------------------------
-# Entry point
-# --------------------------------------------------------------------------
+
 def main():
     print("Recipe Discovery System - Client")
     name = prompt("Enter your name: ").strip() or "anonymous"
