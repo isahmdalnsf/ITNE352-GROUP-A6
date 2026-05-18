@@ -1,13 +1,3 @@
-"""
-End-to-end smoke test for the Recipe Discovery System.
-
-Runs server.py as a subprocess, drives it as a client through every menu
-option (1.1-1.5 and 2.1-2.3), then writes a pass/fail report to
-smoke_report.txt and exits.
-
-The server's stdout is captured and included in the report so the live
-console messages can be verified.
-"""
 
 import os
 import socket
@@ -50,7 +40,6 @@ def main():
     results = []
     results.append(f"started at {time.strftime('%H:%M:%S')}")
 
-    # Start server, redirect its stdout/stderr to a log file we can read.
     log_fh = open(SERVER_LOG, "w", encoding="utf-8")
     server = subprocess.Popen(
         [sys.executable, "-u", "server.py"],
@@ -68,7 +57,6 @@ def main():
             size = os.path.getsize("reference_G1.json")
             results.append(f"PASS: reference_G1.json exists ({size} bytes)")
 
-        # Connect a client
         sock = socket.create_connection((HOST, PORT), timeout=10)
         send_message(sock, {"type": "hello", "name": "smoke_tester"})
         welcome = recv_message(sock)
@@ -78,22 +66,18 @@ def main():
             results.append(f"FAIL: handshake response = {welcome!r}")
             return results
 
-        # 2.1 categories from cache
         r = call(sock, {"type": "ref", "kind": "categories"})
         ok = r.get("status") == "ok" and len(r.get("items", [])) > 0
         results.append(f"{'PASS' if ok else 'FAIL'}: 2.1 categories -> {len(r.get('items',[]))} items")
 
-        # 2.2 areas
         r = call(sock, {"type": "ref", "kind": "areas"})
         ok = r.get("status") == "ok" and len(r.get("items", [])) > 0
         results.append(f"{'PASS' if ok else 'FAIL'}: 2.2 areas -> {len(r.get('items',[]))} items")
 
-        # 2.3 ingredients
         r = call(sock, {"type": "ref", "kind": "ingredients"})
         ok = r.get("status") == "ok" and len(r.get("items", [])) > 0
         results.append(f"{'PASS' if ok else 'FAIL'}: 2.3 ingredients -> {len(r.get('items',[]))} items")
 
-        # 1.1 search
         r = call(sock, {"type": "recipe", "op": "search", "query": "chicken"})
         items = r.get("items", [])
         ok = r.get("status") == "ok"
@@ -104,24 +88,19 @@ def main():
             ok = r.get("status") == "ok" and r.get("recipe", {}).get("name")
             results.append(f"{'PASS' if ok else 'FAIL'}: 1.1 lookup first hit -> {r.get('recipe',{}).get('name')}")
 
-        # 1.2 filter by category
         r = call(sock, {"type": "recipe", "op": "filter_category", "value": "Seafood"})
         results.append(f"{'PASS' if r.get('status')=='ok' else 'FAIL'}: 1.2 Seafood -> {len(r.get('items',[]))} items")
 
-        # 1.3 filter by area
         r = call(sock, {"type": "recipe", "op": "filter_area", "value": "Italian"})
         results.append(f"{'PASS' if r.get('status')=='ok' else 'FAIL'}: 1.3 Italian -> {len(r.get('items',[]))} items")
 
-        # 1.4 filter by ingredient
         r = call(sock, {"type": "recipe", "op": "filter_ingredient", "value": "chicken_breast"})
         results.append(f"{'PASS' if r.get('status')=='ok' else 'FAIL'}: 1.4 chicken_breast -> {len(r.get('items',[]))} items")
 
-        # 1.5 random
         r = call(sock, {"type": "recipe", "op": "random"})
         ok = r.get("status") == "ok" and r.get("recipe", {}).get("name")
         results.append(f"{'PASS' if ok else 'FAIL'}: 1.5 random -> {r.get('recipe',{}).get('name')}")
 
-        # Per-client JSON files
         expected = [f"smoke_tester_{opt}_G1.json" for opt in
                     ("1.1", "1.2", "1.3", "1.4", "1.5")]
         for path in expected:
@@ -130,7 +109,6 @@ def main():
             else:
                 results.append(f"FAIL: {path} missing")
 
-        # bye
         send_message(sock, {"type": "bye"})
         recv_message(sock)
         sock.close()
