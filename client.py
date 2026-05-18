@@ -1,33 +1,29 @@
-import ssl
-
 import socket
+import ssl
 import sys
-
+ 
 from protocol import ProtocolError, recv_message, send_message
-
-
+ 
 HOST = "127.0.0.1"
 PORT = 5050
-
-
-
+CERT_FILE = "cert.pem"
+ 
+ 
 def prompt(text):
-    """Read a line of input, raising KeyboardInterrupt on EOF for clean exit."""
     try:
         return input(text)
     except EOFError:
         raise KeyboardInterrupt
-
-
+ 
+ 
 def prompt_choice(text, valid):
-    """Ask until the user enters one of the valid option strings."""
     while True:
         choice = prompt(text).strip()
         if choice in valid:
             return choice
         print(f"Please enter one of: {', '.join(valid)}")
-
-
+ 
+ 
 def prompt_index(text, count):
     while True:
         raw = prompt(text).strip()
@@ -38,29 +34,25 @@ def prompt_index(text, count):
             if 0 <= n <= count:
                 return n
         print(f"Please enter a number between 0 and {count} (0 to cancel).")
-
-
-
+ 
+ 
 def exchange(sock, request):
-    """Send a request and return the server's response (or an error dict)."""
     send_message(sock, request)
     response = recv_message(sock)
     if response is None:
         raise ConnectionError("server closed the connection")
     return response
-
-
+ 
+ 
 def fetch_reference(sock, kind):
-    
     resp = exchange(sock, {"type": "ref", "kind": kind})
     if resp.get("status") != "ok":
         print(f"Error: {resp.get('message', 'unknown error')}")
         return []
     return resp.get("items", [])
-
-
+ 
+ 
 def show_recipe_list(items):
-    """Render a brief recipe list (id / name / thumbnail) numbered for picking."""
     if not items:
         print("  (no recipes found)")
         return
@@ -71,10 +63,9 @@ def show_recipe_list(items):
         thumb = item.get("thumbnail", "")
         if thumb:
             print(f"       thumb: {thumb}")
-
-
+ 
+ 
 def show_recipe_detail(recipe):
-    
     if not recipe:
         print("  (no recipe)")
         return
@@ -87,7 +78,6 @@ def show_recipe_detail(recipe):
         print(f"  Tags        : {tags}")
     print(f"  YouTube     : {recipe.get('youtube','') or '(none)'}")
     print(f"  Source      : {recipe.get('source','') or '(none)'}")
-
     print("  Ingredients :")
     for ing in recipe.get("ingredients", []):
         measure = ing.get("measure", "").strip()
@@ -96,7 +86,6 @@ def show_recipe_detail(recipe):
             print(f"    - {name} ({measure})")
         else:
             print(f"    - {name}")
-
     instr = (recipe.get("instructions", "") or "").strip()
     print("  Instructions:")
     if instr:
@@ -107,8 +96,8 @@ def show_recipe_detail(recipe):
     else:
         print("    (none)")
     print()
-
-
+ 
+ 
 def show_categories(items):
     if not items:
         print("  (none)")
@@ -122,18 +111,17 @@ def show_categories(items):
             print(f"  - {name}: {desc}")
         else:
             print(f"  - {name}")
-
-
+ 
+ 
 def show_simple_names(items):
     if not items:
         print("  (none)")
         return
     for it in items:
         print(f"  - {it.get('name','')}")
-
-
+ 
+ 
 def pick_from_named_list(items, prompt_label):
-    """Show a numbered list of named items and let the user pick one."""
     if not items:
         print(f"  (no {prompt_label} available)")
         return None
@@ -143,15 +131,12 @@ def pick_from_named_list(items, prompt_label):
     if n == 0:
         return None
     return items[n - 1].get("name", "")
-
-
-
+ 
+ 
 def drilldown_recipe(sock, items, option_id):
-    """After listing recipes, let the user pick one to view in full."""
     if not items:
         return
-    n = prompt_index("Pick a recipe number for full details (0 to skip): ",
-                     len(items))
+    n = prompt_index("Pick a recipe number for full details (0 to skip): ", len(items))
     if n == 0:
         return
     meal_id = items[n - 1].get("id", "")
@@ -164,8 +149,8 @@ def drilldown_recipe(sock, items, option_id):
         print(f"Error: {resp.get('message', 'unknown error')}")
         return
     show_recipe_detail(resp.get("recipe"))
-
-
+ 
+ 
 def option_search_by_name(sock):
     keyword = prompt("Enter recipe name keyword: ").strip()
     if not keyword:
@@ -179,15 +164,14 @@ def option_search_by_name(sock):
     items = resp.get("items", [])
     show_recipe_list(items)
     drilldown_recipe(sock, items, "1.1")
-
-
+ 
+ 
 def option_filter_by_category(sock):
     categories = fetch_reference(sock, "categories")
     name = pick_from_named_list(categories, "category")
     if not name:
         return
-    resp = exchange(sock, {"type": "recipe", "op": "filter_category",
-                           "value": name})
+    resp = exchange(sock, {"type": "recipe", "op": "filter_category", "value": name})
     if resp.get("status") != "ok":
         print(f"Error: {resp.get('message', 'unknown error')}")
         return
@@ -195,15 +179,14 @@ def option_filter_by_category(sock):
     items = resp.get("items", [])
     show_recipe_list(items)
     drilldown_recipe(sock, items, "1.2")
-
-
+ 
+ 
 def option_filter_by_area(sock):
     areas = fetch_reference(sock, "areas")
     name = pick_from_named_list(areas, "area")
     if not name:
         return
-    resp = exchange(sock, {"type": "recipe", "op": "filter_area",
-                           "value": name})
+    resp = exchange(sock, {"type": "recipe", "op": "filter_area", "value": name})
     if resp.get("status") != "ok":
         print(f"Error: {resp.get('message', 'unknown error')}")
         return
@@ -211,16 +194,15 @@ def option_filter_by_area(sock):
     items = resp.get("items", [])
     show_recipe_list(items)
     drilldown_recipe(sock, items, "1.3")
-
-
+ 
+ 
 def option_filter_by_ingredient(sock):
     raw = prompt("Enter an ingredient (single word, spaces become _): ").strip()
     if not raw:
         print("  (empty ingredient)")
         return
     ingredient = raw.replace(" ", "_")
-    resp = exchange(sock, {"type": "recipe", "op": "filter_ingredient",
-                           "value": ingredient})
+    resp = exchange(sock, {"type": "recipe", "op": "filter_ingredient", "value": ingredient})
     if resp.get("status") != "ok":
         print(f"Error: {resp.get('message', 'unknown error')}")
         return
@@ -228,8 +210,8 @@ def option_filter_by_ingredient(sock):
     items = resp.get("items", [])
     show_recipe_list(items)
     drilldown_recipe(sock, items, "1.4")
-
-
+ 
+ 
 def option_random_recipe(sock):
     resp = exchange(sock, {"type": "recipe", "op": "random"})
     if resp.get("status") != "ok":
@@ -237,10 +219,8 @@ def option_random_recipe(sock):
         return
     print("\nRandom recipe:")
     show_recipe_detail(resp.get("recipe"))
-
-
-
-# Menu
+ 
+ 
 RECIPES_MENU = (
     "\nRecipes Menu\n"
     "  1.1  Search by name\n"
@@ -250,7 +230,7 @@ RECIPES_MENU = (
     "  1.5  Random recipe\n"
     "  1.6  Back to main menu\n"
 )
-
+ 
 REFERENCE_MENU = (
     "\nReference Menu\n"
     "  2.1  List all categories\n"
@@ -258,15 +238,15 @@ REFERENCE_MENU = (
     "  2.3  List all ingredients\n"
     "  2.4  Back to main menu\n"
 )
-
+ 
 MAIN_MENU = (
     "\nMain Menu\n"
     "  1  Browse recipes\n"
     "  2  Reference lists\n"
     "  3  Quit\n"
 )
-
-
+ 
+ 
 def recipes_menu_loop(sock):
     actions = {
         "1.1": option_search_by_name,
@@ -282,13 +262,12 @@ def recipes_menu_loop(sock):
         if choice == "1.6":
             return
         actions[choice](sock)
-
-
+ 
+ 
 def reference_menu_loop(sock):
     while True:
         print(REFERENCE_MENU)
-        choice = prompt_choice("Choose an option: ",
-                               {"2.1", "2.2", "2.3", "2.4"})
+        choice = prompt_choice("Choose an option: ", {"2.1", "2.2", "2.3", "2.4"})
         if choice == "2.4":
             return
         if choice == "2.1":
@@ -303,8 +282,8 @@ def reference_menu_loop(sock):
             items = fetch_reference(sock, "ingredients")
             print(f"\nIngredients (showing first 50 of {len(items)}):")
             show_simple_names(items[:50])
-
-
+ 
+ 
 def main_menu_loop(sock):
     while True:
         print(MAIN_MENU)
@@ -315,19 +294,22 @@ def main_menu_loop(sock):
             reference_menu_loop(sock)
         else:
             return
-
-
-
+ 
+ 
 def main():
     print("Recipe Discovery System - Client")
     name = prompt("Enter your name: ").strip() or "anonymous"
-
+ 
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    tls.load_verify_locations(CERT_FILE)
+ 
     try:
-        sock = socket.create_connection((HOST, PORT), timeout=30)
+        raw = socket.create_connection((HOST, PORT), timeout=30)
+        sock = tls.wrap_socket(raw, server_hostname=HOST)
     except OSError as exc:
         print(f"Cannot connect to {HOST}:{PORT}: {exc}")
         sys.exit(1)
-
+ 
     sock.settimeout(None)
     try:
         send_message(sock, {"type": "hello", "name": name})
@@ -336,7 +318,7 @@ def main():
             print("Server refused the connection.")
             return
         print(f"Connected. Server says: {welcome.get('message','')}")
-
+ 
         try:
             main_menu_loop(sock)
         except KeyboardInterrupt:
@@ -355,7 +337,7 @@ def main():
         except OSError:
             pass
         print("Goodbye.")
-
-
+ 
+ 
 if __name__ == "__main__":
     main()
