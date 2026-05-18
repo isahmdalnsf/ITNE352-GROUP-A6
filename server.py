@@ -1,14 +1,4 @@
-"""
-Recipe Discovery System - Server
-ITNE352 Term Project
 
-Multi-threaded TCP server that exposes TheMealDB recipe data to clients.
-On startup it caches three reference lists (categories, areas, ingredients)
-and persists them to disk. Recipe queries are forwarded to TheMealDB and the
-JSON response is mirrored to a per-client file.
-
-Edit the configuration block below for your group.
-"""
 
 import json
 import socket
@@ -19,9 +9,6 @@ from datetime import datetime
 
 from protocol import ProtocolError, recv_message, send_message
 
-# --------------------------------------------------------------------------
-# Configuration -- edit for your group
-# --------------------------------------------------------------------------
 GROUP_ID = "G1"
 HOST = "0.0.0.0"
 PORT = 5050
@@ -35,9 +22,7 @@ INGREDIENT_FILE_LIMIT = 50
 
 REFERENCE_FILE = f"reference_{GROUP_ID}.json"
 
-# --------------------------------------------------------------------------
-# Shared state
-# --------------------------------------------------------------------------
+
 reference_cache = {
     "categories": [],
     "areas": [],
@@ -57,9 +42,7 @@ def log(message):
         print(f"[{stamp}] {message}", flush=True)
 
 
-# --------------------------------------------------------------------------
-# TheMealDB access
-# --------------------------------------------------------------------------
+
 def http_get_json(path, params=None):
     """GET <MEALDB_BASE><path>?<params> and return the parsed JSON dict."""
     url = MEALDB_BASE + path
@@ -103,7 +86,6 @@ def build_reference_cache():
 
 
 def persist_reference_file():
-    """Write the cached reference data to reference_<GROUP_ID>.json."""
     snapshot = {
         "group_id": GROUP_ID,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -115,11 +97,8 @@ def persist_reference_file():
         json.dump(snapshot, fh, ensure_ascii=False, indent=2)
     log(f"Wrote reference cache to {REFERENCE_FILE}.")
 
-# --------------------------------------------------------------------------
-# Recipe helpers
-# --------------------------------------------------------------------------
+
 def brief_recipe(meal):
-    """Project a raw TheMealDB meal record to the (id, name, thumb) triple."""
     return {
         "id": meal.get("idMeal", ""),
         "name": meal.get("strMeal", ""),
@@ -150,7 +129,6 @@ def full_recipe(meal):
 
 
 def save_recipe_response(client_name, option, payload):
-    """Append a recipe response to <client_name>_<option>_<GROUP_ID>.json."""
     safe_name = "".join(ch for ch in client_name if ch.isalnum() or ch in "-_") or "client"
     path = f"{safe_name}_{option}_{GROUP_ID}.json"
     record = {
@@ -172,9 +150,6 @@ def save_recipe_response(client_name, option, payload):
             json.dump(history, fh, ensure_ascii=False, indent=2)
 
 
-# --------------------------------------------------------------------------
-# Request dispatch
-# --------------------------------------------------------------------------
 def handle_reference(kind):
     """Serve a reference list from the in-memory cache."""
     if kind == "categories":
@@ -253,9 +228,6 @@ def handle_recipe(req, client_name):
 
 
 
-# --------------------------------------------------------------------------
-# Per-connection thread
-# --------------------------------------------------------------------------
 def describe_request(req):
     """Build a short human-readable summary for the console log."""
     rtype = req.get("type", "?")
@@ -282,7 +254,6 @@ def request_source(req):
 
 
 def handle_client(conn, addr):
-    """Per-client loop: greet, dispatch requests, log lifecycle."""
     client_name = f"{addr[0]}:{addr[1]}"
     try:
         hello = recv_message(conn)
@@ -343,9 +314,7 @@ def handle_client(conn, addr):
         log(f"Client disconnected: {client_name}")
 
 
-# --------------------------------------------------------------------------
-# Entry point
-# --------------------------------------------------------------------------
+
 def main():
     build_reference_cache()
     persist_reference_file()
