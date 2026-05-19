@@ -3,9 +3,7 @@ import json
 import ssl
  
 class RecipeClient:
-    """
-    RecipeClient Class - Connects to server and handles user interactions
-    """
+    
    
     def __init__(self, host='localhost', port=12345, use_ssl=True):
         self.host = host
